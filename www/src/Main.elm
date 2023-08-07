@@ -1,6 +1,5 @@
 module Main exposing (..)
 
-import Debug
 import Browser
 import Browser.Navigation as Nav
 import Html exposing (Html)
@@ -50,7 +49,7 @@ uint64 key =
     Query.custom key <| \stringList ->
         case stringList of
             [str] ->
-                Debug.log "parsing rule index" UInt64.fromString str
+                UInt64.fromString str
 
             _ ->
                 Nothing
