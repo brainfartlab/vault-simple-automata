@@ -150,7 +150,7 @@ update msg model =
                         , Builder.int "window" newWindowSize
                         ]
             in
-            ( model
+            ( { model | windowSize = newWindowSize, ruleIndex = boundedRuleIndex }
             , Nav.pushUrl model.key newUrl
             )
 
@@ -168,7 +168,7 @@ update msg model =
                         , Builder.int "window" model.windowSize
                         ]
             in
-            ( model
+            ( { model | ruleIndex = newRuleIndex }
             , Nav.pushUrl model.key newUrl
             )
 
@@ -202,12 +202,7 @@ update msg model =
                             , window = Just defaultWindowSize
                             }
             in
-            ( { ruleIndex = simulation.index |> Maybe.withDefault defaultRuleIndex
-              , windowSize = simulation.window |> Maybe.withDefault defaultWindowSize
-              , cellSize = model.cellSize
-              , state = Idle
-              , key = model.key
-              }
+            ( model
             , Cmd.none
             )
 
