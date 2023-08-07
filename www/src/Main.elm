@@ -1,37 +1,70 @@
 module Main exposing (..)
 
+import Debug
 import Browser
+import Browser.Navigation as Nav
+import Html exposing (Html)
+import Html.Attributes exposing (style)
+import Html.Events exposing (on)
+import Url
+import Url.Builder as Builder
+import Url.Parser exposing (parse, query)
+import Url.Parser.Query as Query
+
+import Json.Decode exposing (Decoder)
+import Json.Decode.Pipeline exposing (requiredAt, resolve)
+
 import Colors.Alpha as A
-import Combination exposing (Cell, Combination, getCombination)
 import Element as E exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
-import Html exposing (Html)
-import Html.Attributes exposing (style)
-import Html.Events exposing (on)
-import Json.Decode exposing (Decoder)
-import Json.Decode.Pipeline exposing (requiredAt, resolve)
 import Material.Icons as Filled
-import Material.Icons.Round as Round
 import Material.Icons.Types exposing (Coloring(..), Icon)
-import Rule exposing (Rule, RuleIndex, flipBit, maxRuleIndex, numberOfCombinations)
 import Svg exposing (Svg, g, rect, svg)
 import Svg.Attributes as SvgAtt
 import Svg.Events as SvgEv
 import UInt64 exposing (UInt64)
 
+import Rule exposing (Rule, RuleIndex, flipBit, maxRuleIndex, numberOfCombinations)
+import Combination exposing (Cell, Combination, getCombination)
+
 
 -- MAIN
 
 
+type alias Simulation =
+    { index: Maybe UInt64
+    , window: Maybe Int
+    }
+
+
+parseSimulation : Query.Parser Simulation
+parseSimulation =
+    Query.map2 Simulation (uint64 "index") (Query.int "window")
+
+
+uint64 : String -> Query.Parser (Maybe UInt64)
+uint64 key =
+    Query.custom key <| \stringList ->
+        case stringList of
+            [str] ->
+                Debug.log "parsing rule index" UInt64.fromString str
+
+            _ ->
+                Nothing
+
+
+main : Program () Model Msg
 main =
-    Browser.element
+    Browser.application
         { init = init
         , update = update
         , subscriptions = subscriptions
         , view = view
+        , onUrlChange = UrlChanged
+        , onUrlRequest = LinkClicked
         }
 
 
@@ -43,6 +76,7 @@ type alias Model =
     , windowSize : Int
     , cellSize: Int
     , state : State
+    , key : Nav.Key
     }
 
 
@@ -60,12 +94,30 @@ type AutomataAttribute
     | State State
 
 
-init : () -> (Model, Cmd Msg)
-init _ =
-    ( { ruleIndex = (UInt64.fromInt 90)
-      , windowSize = 3
+init : () -> Url.Url -> Nav.Key -> (Model, Cmd Msg)
+init _ url key =
+    let
+        defaultRuleIndex : RuleIndex
+        defaultRuleIndex =
+            UInt64.fromInt 90
+
+        defaultWindowSize : Int
+        defaultWindowSize =
+            3
+
+        simulation : Simulation
+        simulation =
+            parse (query parseSimulation) url
+                |> Maybe.withDefault
+                    { index = Just defaultRuleIndex
+                    , window = Just defaultWindowSize
+                    }
+    in
+    ( { ruleIndex = simulation.index |> Maybe.withDefault defaultRuleIndex
+      , windowSize = simulation.window |> Maybe.withDefault defaultWindowSize
       , cellSize = 5
       , state = Idle
+      , key = key
       }
     , Cmd.none
     )
@@ -79,6 +131,8 @@ type Msg
     | UpdateCellSize Int
     | UpdateRuleIndex RuleIndex
     | ChangeState (Maybe State)
+    | UrlChanged Url.Url
+    | LinkClicked Browser.UrlRequest
 
 
 update : Msg -> Model -> (Model, Cmd Msg)
@@ -90,9 +144,15 @@ update msg model =
                 boundedRuleIndex =
                     sliceRuleIndex model.ruleIndex newWindowSize
 
+                newUrl : String
+                newUrl =
+                    Builder.relative []
+                        [ Builder.string "index" (UInt64.toString model.ruleIndex)
+                        , Builder.int "window" newWindowSize
+                        ]
             in
-            ( { model | ruleIndex = boundedRuleIndex, windowSize = newWindowSize, state = Idle }
-            , Cmd.none
+            ( model
+            , Nav.pushUrl model.key newUrl
             )
 
         UpdateCellSize newCellSize ->
@@ -101,8 +161,16 @@ update msg model =
             )
 
         UpdateRuleIndex newRuleIndex ->
-            ( { model | ruleIndex = newRuleIndex, state = Idle}
-            , Cmd.none
+            let
+                newUrl : String
+                newUrl =
+                    Builder.relative []
+                        [ Builder.string "index" (UInt64.toString newRuleIndex)
+                        , Builder.int "window" model.windowSize
+                        ]
+            in
+            ( model
+            , Nav.pushUrl model.key newUrl
             )
 
         ChangeState stateValue ->
@@ -116,6 +184,39 @@ update msg model =
                     ( model
                     , Cmd.none
                     )
+
+        UrlChanged url ->
+            let
+                defaultRuleIndex : RuleIndex
+                defaultRuleIndex =
+                    UInt64.fromInt 110
+
+                defaultWindowSize : Int
+                defaultWindowSize =
+                    3
+
+                simulation : Simulation
+                simulation =
+                    parse (query parseSimulation) url
+                        |> Maybe.withDefault
+                            { index = Just defaultRuleIndex
+                            , window = Just defaultWindowSize
+                            }
+            in
+            ( { ruleIndex = simulation.index |> Maybe.withDefault defaultRuleIndex
+              , windowSize = simulation.window |> Maybe.withDefault defaultWindowSize
+              , cellSize = model.cellSize
+              , state = Idle
+              , key = model.key
+              }
+            , Cmd.none
+            )
+
+
+        LinkClicked urlRequest ->
+            ( model
+            , Cmd.none
+            )
 
 
 sliceRuleIndex : UInt64 -> Int -> UInt64
@@ -140,9 +241,12 @@ subscriptions model =
 -- VIEW
 
 
-view : Model -> Html Msg
+view : Model -> Browser.Document Msg
 view model =
-    E.layout [] (viewAutomata model)
+    { title = "Simple Automata"
+    , body =
+        [ E.layout [] (viewAutomata model) ]
+    }
 
 
 
