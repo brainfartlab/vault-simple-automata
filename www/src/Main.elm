@@ -106,7 +106,8 @@ init _ url key =
 
         simulation : Simulation
         simulation =
-            parse (query parseSimulation) url
+            { url | path = "" }
+                |> parse (query parseSimulation)
                 |> Maybe.withDefault
                     { index = Just defaultRuleIndex
                     , window = Just defaultWindowSize
@@ -188,7 +189,7 @@ update msg model =
             let
                 defaultRuleIndex : RuleIndex
                 defaultRuleIndex =
-                    UInt64.fromInt 110
+                    UInt64.fromInt 90
 
                 defaultWindowSize : Int
                 defaultWindowSize =
